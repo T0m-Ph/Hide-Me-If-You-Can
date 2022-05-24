@@ -28,6 +28,15 @@ def parseArgs():
         help="Attempts to detect emulation by studying the behavoir of commonly unimplemented win32 APIs."
     )
 
+    generate.add_argument(
+        '--format', 
+        choices=[e.name for e in constants.Formats], 
+        required=True,
+        nargs='?',
+        const=constants.Formats.exe,
+        help="The format of the output."
+    )
+    
     spoof = subparser.add_parser(constants.COMMAND_SPOOF)
     spoof.add_argument('--parentProcess', required=True)
     spoof.add_argument('--childProcess', required=True)
@@ -54,11 +63,11 @@ def main():
             if args.detectEmulation:
                 mb.setEmulation()
 
-            mb.gatherGenerationCode()        
+            mb.gatherGenerationCode(constants.Formats[args.format])        
             
         elif args.command == constants.COMMAND_SPOOF:
             mb.setPPIDSpoofing(args.parentProcess, args.childProcess)
-            mb.gatherSpoofingCode()        
+            mb.gatherSpoofingCode(constants.Formats[args.format])        
 
         mb.writeCodeToFile(constants.RESULTING_EXECUTABLE_NAME)
         mb.compile()

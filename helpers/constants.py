@@ -17,8 +17,8 @@ NTDLL_PATH = "c:\\windows\\system32\\ntdll.dll" + "\x00"
 RESULTING_EXECUTABLE_NAME = "hmiyc"
 
 class Encryption(Enum):
-    XOR = "ENCRYPTION_XOR"
-    AES = "ENCRYPTION_AES"
+    xor = "ENCRYPTION_XOR"
+    aes = "ENCRYPTION_AES"
 
 class Injection(Enum):
     CLASSIC = "INJECTION_CLASSIC"
@@ -26,3 +26,7 @@ class Injection(Enum):
 class Unhooking(Enum):
     freshCopy = "UNHOOKING_FRESH_COPY"
     perunsFart = "UNHOOKING_PERUNS_FART"
+
+class Formats(Enum):
+    dll = "DLL"
+    exe = "EXE"

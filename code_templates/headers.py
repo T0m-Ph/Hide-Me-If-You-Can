@@ -16,6 +16,12 @@ ADVAPI_LIB = {
     "dependencies": [WINDOWS_H]
 }
 
+USER_32_LIB = {
+    "name": "ADVAPI_LIB",
+    "code": "#pragma comment (lib, \"user32.lib\")",
+    "dependencies": [WINDOWS_H]
+}
+
 WINCRYPT_H = {
     "name": "WINCRYPT_H",
     "code": "#include <wincrypt.h>",
@@ -33,17 +39,3 @@ SKERNEL32 = {
     "code": "unsigned char sKernel32[] = { 'k','e','r','n','e','l','3','2','.','d','l','l', 0x0 };",
     "dependencies": []
 }
-
-# def getHeaderCode(header, alreadyIncludedHeaders):
-#     code = ""
-#     includedDependencies = set()
-#     for dep in header['dependencies']:
-#         if dep["name"] not in alreadyIncludedHeaders:
-#             depCode, depDependencies = getHeaderCode(dep, alreadyIncludedHeaders)
-#             code += depCode
-#             code += "\n"
-#             includedDependencies.update(depDependencies)
-#     code += header['code']
-#     for dependency in header['dependencies']:
-#         includedDependencies.add(dependency["name"])
-#     return code, includedDependencies

